@@ -1,0 +1,115 @@
+// scheduler.proto
+syntax = "proto3";
+
+package scheduler;
+option go_package = ".;scheduler";
+
+import "google/protobuf/timestamp.proto";
+
+// Enum to represent the possible states of a job.
+enum JobStatus {
+  UNKNOWN = 0;
+  PENDING = 1;
+  RUNNING = 2;
+  COMPLETED = 3;
+  FAILED = 4;
+}
+
+// Enum to represent the state of a worker node.
+enum WorkerStatus {
+  WORKER_UNKNOWN = 0;
+  IDLE = 1;
+  BUSY = 2;
+}
+
+// The primary Job message.
+message Job {
+  string id = 1;
+  string command = 2;
+  JobStatus status = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp completed_at = 6;
+  string output = 7; // To store stdout/stderr from the job execution
+}
+
+// --- RPC Message Definitions ---
+
+// RegisterWorker
+message RegisterWorkerRequest {
+  string worker_id = 1; // A unique ID for the worker (e.g., hostname:port)
+  int32 capacity = 2; // How many concurrent jobs this worker can run
+}
+
+message RegisterWorkerResponse {
+  bool registered = 1;
+  string master_id = 2; // The ID of the master that handled the request
+}
+
+// SendHeartbeat
+message HeartbeatRequest {
+  string worker_id = 1;
+  WorkerStatus status = 2;
+  int32 running_jobs = 3;
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+  // The master could potentially send commands back in a heartbeat response.
+  // For now, it's just a simple acknowledgement.
+}
+
+// SubmitJob
+message SubmitJobRequest {
+  string command = 1; // The shell command to execute
+}
+
+message SubmitJobResponse {
+  string job_id = 1; // The ID assigned to the newly created job
+  JobStatus status = 2;
+}
+
+// UpdateJobStatus
+message UpdateJobStatusRequest {
+    string worker_id = 1;
+    string job_id = 2;
+    JobStatus new_status = 3;
+    string output = 4; // Any output from the job
+}
+
+message UpdateJobStatusResponse {
+    bool acknowledged = 1;
+}
+
+// The main Scheduler service definition.
+// This is the service the Master node will implement.
+service Scheduler {
+  // Worker nodes call this to join the cluster.
+  rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
+
+  // Workers call this periodically to signal they are alive.
+  rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
+  // Clients (or an API gateway) call this to submit a new job.
+  rpc SubmitJob(SubmitJobRequest) returns (SubmitJobResponse);
+
+  // Workers call this to update the master on the status of a job.
+  rpc UpdateJobStatus(UpdateJobStatusRequest) returns (UpdateJobStatusResponse);
+}
+
+// --- Worker Service Definition ---
+
+// ExecuteJob
+message ExecuteJobRequest {
+    Job job_to_run = 1;
+}
+
+message ExecuteJobResponse {
+    bool accepted = 1; // Did the worker accept the job?
+}
+
+// The service that the Worker nodes will implement.
+// This allows the master to send jobs to the workers.
+service Worker {
+    rpc ExecuteJob(ExecuteJobRequest) returns (ExecuteJobResponse);
+}

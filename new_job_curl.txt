@@ -1,0 +1,4 @@
+curl -X POST \
+  http://localhost:8080/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{"command": "echo Hello from the HTTP API && sleep 5"}'
